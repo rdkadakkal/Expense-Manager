@@ -1,0 +1,14 @@
+# 1. The most important rule: Ignore Streamlit secrets
+.streamlit/secrets.toml
+
+# 2. Ignore Python compiled files (junk files)
+__pycache__/
+*.pyc
+
+# 3. Ignore virtual environments (if you created one locally)
+venv/
+env/
+.venv/
+
+# 4. Mac system files (avoids clutter)
+.DS_Store

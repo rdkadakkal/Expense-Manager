@@ -27,13 +27,13 @@ if not st.session_state.authenticated:
     st.stop()
 
 # Configure Gemini
-# Configure Gemini
 try:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
     model = genai.GenerativeModel('gemini-2.0-flash')
 except Exception as e:
     st.error(f"Error configuring Gemini: {e}")
     st.stop()
+
 # ------------------------------------------------------------------
 # 2. DATA FUNCTIONS (Google Sheets)
 # ------------------------------------------------------------------
@@ -88,7 +88,7 @@ def analyze_intent_and_process(user_input, current_df):
     # Context data for the AI to answer queries
     data_summary = ""
     if not current_df.empty:
-        # Pass a summarized version to save tokens, or full CSV if small
+        # Pass a summarized version to save tokens
         data_summary = current_df.to_csv(index=False)
 
     current_date = datetime.now().strftime("%Y-%m-%d")
@@ -230,4 +230,71 @@ with tab1:
                     st.markdown(response_msg)
                 st.session_state.messages.append({"role": "assistant", "content": response_msg})
 
+# --- TAB 2: DASHBOARD ---
+with tab2:
+    st.header("Spending Overview")
+    
+    df = get_data()
+    
+    if not df.empty:
+        # --- ROBUST DATA CLEANUP (Prevents Crashes) ---
+        # 1. Force Amount to be numeric (turn "100" into 100.0)
+        df["Amount"] = pd.to_numeric(df["Amount"], errors='coerce').fillna(0.0)
+        
+        # 2. Force Category to be string (prevents mixed type errors)
+        df["Category"] = df["Category"].fillna("Uncategorized").astype(str)
+        
+        # 3. Handle Dates
+        df["Date"] = pd.to_datetime(df["Date"], errors='coerce')
+
+        # --- METRICS SECTION ---
+        col1, col2 = st.columns(2)
+        total_spent = df["Amount"].sum()
+        
+        with col1:
+            st.metric("Total Spent (All Time)", f"${total_spent:,.2f}")
+        
+        with col2:
+            # Safe month calculation
+            if not df["Date"].isna().all():
+                current_month = datetime.now().month
+                current_year = datetime.now().year
+                monthly_mask = (df["Date"].dt.month == current_month) & (df["Date"].dt.year == current_year)
+                monthly_spent = df.loc[monthly_mask, "Amount"].sum()
+                st.metric("This Month", f"${monthly_spent:,.2f}")
+            else:
+                st.metric("This Month", "$0.00")
+
+        st.divider()
+
+        # --- CHART SECTION (With Safety Try/Except) ---
+        st.subheader("Expenses by Category")
+        
+        try:
+            # Group data safely
+            cat_group = df.groupby("Category")["Amount"].sum()
+            
+            # We use a Bar Chart because it is 10x more stable than Pie Chart on Cloud
+            if not cat_group.empty and cat_group.sum() > 0:
+                st.bar_chart(cat_group)
+            else:
+                st.info("Add some expenses to see your spending breakdown!")
+                
+        except Exception as e:
+            # If chart crashes, show this error but KEEP APP RUNNING
+            st.warning(f"Could not render chart (Data Issue): {e}")
+            st.write("Here is your raw data instead:")
+            st.dataframe(df)
+
+        # --- RECENT TRANSACTIONS ---
+        st.divider()
+        st.subheader("Recent Transactions")
+        
+        # Display latest 5 items
+        st.dataframe(
+            df.sort_values(by="Date", ascending=False).head(5), 
+            use_container_width=True
+        )
+        
     else:
+        st.info("No data found in Google Sheets yet. Go to the Chat tab to add expenses!")

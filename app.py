@@ -30,20 +30,10 @@ if not st.session_state.authenticated:
 # Configure Gemini
 try:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-
-# Configure Gemini
-try:
-    genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
     model = genai.GenerativeModel('gemini-2.0-flash')
 except Exception as e:
     st.error(f"Error configuring Gemini: {e}")
     st.stop()
-
-    model = genai.GenerativeModel('gemini-2.0-flash')
-except Exception as e:
-    st.error(f"Error configuring Gemini: {e}")
-    st.stop()
-
 # ------------------------------------------------------------------
 # 2. DATA FUNCTIONS (Google Sheets)
 # ------------------------------------------------------------------

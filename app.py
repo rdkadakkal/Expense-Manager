@@ -29,7 +29,8 @@ if not st.session_state.authenticated:
 # Configure Gemini
 try:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-    model = genai.GenerativeModel('gemini-2.0-flash')
+    # We use 1.5-flash for better stability/limits, but you can switch to 2.0-flash if needed
+    model = genai.GenerativeModel('gemini-1.5-flash')
 except Exception as e:
     st.error(f"Error configuring Gemini: {e}")
     st.stop()
@@ -68,7 +69,7 @@ def save_expense(date, item, amount, category, notes):
         
         updated_df = pd.concat([existing_data, new_entry], ignore_index=True)
         conn.update(data=updated_df)
-        st.toast(f"✅ Saved: {item} - ${amount} ({category})")
+        st.toast(f"✅ Saved: {item} - ₹{amount} ({category})")
         # Clear cache to reflect updates immediately
         st.cache_data.clear()
         return True
@@ -94,7 +95,7 @@ def analyze_intent_and_process(user_input, current_df):
     current_date = datetime.now().strftime("%Y-%m-%d")
     
     system_prompt = f"""
-    You are an intelligent Expense Manager AI. Current Date: {current_date}.
+    You are an intelligent Expense Manager AI for an Indian user. Current Date: {current_date}.
     
     Your goal is to classify the user's input into one of two INTENTS: "LOG_EXPENSE" or "QUERY".
     
@@ -102,7 +103,20 @@ def analyze_intent_and_process(user_input, current_df):
     If the user describes spending money, extract the details.
     - Parse relative dates (e.g., "yesterday", "last friday") into YYYY-MM-DD. Default to {current_date} if not specified.
     - Extract Item, Amount (number only), Category, and Notes.
-    - CRITICAL: If the Category is not explicitly mentioned or clearly implied (e.g., "burger" -> "Food"), set "Category" to "UNCERTAIN".
+    
+    - **AUTO-CATEGORIZATION RULES**:
+      Map the item/context to one of these standardized categories:
+      ['Food', 'Groceries', 'Utility Bills', 'Travel', 'Shopping', 'Entertainment', 'Health', 'Education', 'Other']
+      
+      *Examples:*
+      - "Starbucks", "Lunch", "Burger" -> "Food"
+      - "Uber", "Ola", "Bus ticket", "Petrol" -> "Travel"
+      - "Electricity", "Internet", "Recharge" -> "Utility Bills"
+      - "Medicine", "Doctor" -> "Health"
+      - "Vegetables", "Milk", "Zepto" -> "Groceries"
+      
+    - Only set "Category" to "UNCERTAIN" if the item is completely ambiguous (e.g., "Paid 500 to Rahul").
+    
     - Output JSON format: 
       {{ "intent": "LOG_EXPENSE", "date": "YYYY-MM-DD", "item": "string", "amount": float, "category": "string", "notes": "string" }}
 
@@ -136,7 +150,7 @@ def analyze_intent_and_process(user_input, current_df):
 
 # Initialize Session State
 if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "assistant", "content": "Hello! I can track your expenses or answer questions about your spending. Try 'Spent $20 on lunch today' or 'How much did I spend on Travel?'"}]
+    st.session_state.messages = [{"role": "assistant", "content": "Hello! I can track your expenses. Try 'Spent 200 rupees on auto today' or 'Paid 500 for lunch'."}]
 if "pending_expense" not in st.session_state:
     st.session_state.pending_expense = None # Stores dict if category is missing
 
@@ -201,7 +215,7 @@ with tab1:
                 if data.get("category") == "UNCERTAIN":
                     # Store in session state and ask user
                     st.session_state.pending_expense = data
-                    response_msg = f"I noticed you spent **${data['amount']}** on **{data['item']}**, but I'm not sure about the category. Could you tell me which category this belongs to?"
+                    response_msg = f"I noticed you spent **₹{data['amount']}** on **{data['item']}**, but I'm not sure about the category. Could you tell me which category this belongs to?"
                     
                     with st.chat_message("assistant"):
                         st.markdown(response_msg)
@@ -212,7 +226,7 @@ with tab1:
                         data['date'], data['item'], data['amount'], data['category'], data['notes']
                     )
                     if success:
-                        response_msg = f"✅ Saved: **${data['amount']}** for **{data['item']}** ({data['category']})."
+                        response_msg = f"✅ Saved: **₹{data['amount']}** for **{data['item']}** ({data['category']})."
                     else:
                         response_msg = "Failed to save to Google Sheets."
                         
@@ -252,7 +266,7 @@ with tab2:
         total_spent = df["Amount"].sum()
         
         with col1:
-            st.metric("Total Spent (All Time)", f"${total_spent:,.2f}")
+            st.metric("Total Spent (All Time)", f"₹{total_spent:,.2f}")
         
         with col2:
             # Safe month calculation
@@ -260,41 +274,4 @@ with tab2:
                 current_month = datetime.now().month
                 current_year = datetime.now().year
                 monthly_mask = (df["Date"].dt.month == current_month) & (df["Date"].dt.year == current_year)
-                monthly_spent = df.loc[monthly_mask, "Amount"].sum()
-                st.metric("This Month", f"${monthly_spent:,.2f}")
-            else:
-                st.metric("This Month", "$0.00")
-
-        st.divider()
-
-        # --- CHART SECTION (With Safety Try/Except) ---
-        st.subheader("Expenses by Category")
-        
-        try:
-            # Group data safely
-            cat_group = df.groupby("Category")["Amount"].sum()
-            
-            # We use a Bar Chart because it is 10x more stable than Pie Chart on Cloud
-            if not cat_group.empty and cat_group.sum() > 0:
-                st.bar_chart(cat_group)
-            else:
-                st.info("Add some expenses to see your spending breakdown!")
-                
-        except Exception as e:
-            # If chart crashes, show this error but KEEP APP RUNNING
-            st.warning(f"Could not render chart (Data Issue): {e}")
-            st.write("Here is your raw data instead:")
-            st.dataframe(df)
-
-        # --- RECENT TRANSACTIONS ---
-        st.divider()
-        st.subheader("Recent Transactions")
-        
-        # Display latest 5 items
-        st.dataframe(
-            df.sort_values(by="Date", ascending=False).head(5), 
-            use_container_width=True
-        )
-        
-    else:
-        st.info("No data found in Google Sheets yet. Go to the Chat tab to add expenses!")
+                monthly_spent = df.loc

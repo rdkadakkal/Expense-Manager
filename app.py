@@ -256,19 +256,22 @@ with tab2:
 
         st.divider()
 
+# ... inside TAB 2 ...
+        
         # 2. Charts
         st.subheader("Expenses by Category")
         
+        # Force conversion to numbers (fixes the AttributeError)
+        df["Amount"] = pd.to_numeric(df["Amount"], errors='coerce').fillna(0.0)
+
         # Group by Category
-        cat_group = df.groupby("Category")["Amount"].sum().reset_index()
-        
-        if not cat_group.empty:
-            # Streamlit native pie chart (via Altair under the hood usually, but straightforward)
-            # st.pie_chart expects index to be labels or a specific column setup
-            cat_group = cat_group.set_index("Category")
+        # We pass a Series directly to pie_chart to avoid index errors
+        cat_group = df.groupby("Category")["Amount"].sum()
+
+        if not cat_group.empty and cat_group.sum() > 0:
             st.pie_chart(cat_group)
         else:
-            st.info("Not enough data for visualization.")
+            st.info("Add some expenses to see the chart!")
 
         # 3. Recent Transactions
         st.divider()

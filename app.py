@@ -31,16 +31,13 @@ if not st.session_state.authenticated:
 try:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 
-    # --- START DEBUG CODE ---
-    with st.sidebar:
-        st.header("🔧 Debug: Available Models")
-        try:
-            for m in genai.list_models():
-                if 'generateContent' in m.supported_generation_methods:
-                    st.write(m.name)
-        except Exception as e:
-            st.error(f"API Key Error: {e}")
-    # --- END DEBUG CODE ---
+# Configure Gemini
+try:
+    genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+    model = genai.GenerativeModel('gemini-2.0-flash')
+except Exception as e:
+    st.error(f"Error configuring Gemini: {e}")
+    st.stop()
 
     model = genai.GenerativeModel('gemini-2.0-flash')
 except Exception as e:

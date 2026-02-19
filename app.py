@@ -4,47 +4,129 @@ import google.generativeai as genai
 from streamlit_gsheets import GSheetsConnection
 from datetime import datetime
 import json
-import re
-import altair as alt  # New import for the better chart!
+import altair as alt
 
 # ------------------------------------------------------------------
 # 1. CONFIGURATION & AUTH
 # ------------------------------------------------------------------
-st.set_page_config(page_title="AI Expense Manager", layout="wide")
+st.set_page_config(page_title="AI Expense Manager", layout="wide", page_icon="💳")
+
+# --- CUSTOM CSS FOR "PREMIUM" LOOK ---
+def load_css():
+    st.markdown("""
+        <style>
+        /* Import Google Font */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        
+        html, body, [class*="css"] {
+            font-family: 'Inter', sans-serif;
+        }
+
+        /* Hides top header line */
+        header {visibility: hidden;}
+        
+        /* Modern Dark Gradient Background */
+        .stApp {
+            background: linear-gradient(to bottom right, #0e1117, #1a1c24);
+        }
+
+        /* Custom Card Style for Metrics */
+        .metric-card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+            text-align: center;
+            transition: transform 0.2s;
+        }
+        .metric-card:hover {
+            transform: translateY(-2px);
+            border-color: rgba(255, 255, 255, 0.3);
+        }
+        .metric-label {
+            color: #a0a0a0;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 5px;
+        }
+        .metric-value {
+            color: #ffffff;
+            font-size: 2rem;
+            font-weight: 700;
+            background: -webkit-linear-gradient(45deg, #4facfe, #00f2fe);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        /* Styled Chat Input */
+        .stChatInputContainer {
+            border-radius: 20px !important;
+            border: 1px solid #333 !important;
+        }
+        
+        /* Custom Tab Styling */
+        .stTabs [data-baseweb="tab-list"] {
+            gap: 10px;
+        }
+        .stTabs [data-baseweb="tab"] {
+            background-color: rgba(255,255,255,0.05);
+            border-radius: 8px;
+            padding: 10px 20px;
+            border: none;
+            color: #fff;
+        }
+        .stTabs [aria-selected="true"] {
+            background-color: #4facfe !important;
+            color: white !important;
+        }
+
+        /* DataFrame Styling */
+        [data-testid="stDataFrame"] {
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 10px;
+            padding: 10px;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+load_css()
 
 # Check Password
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 
 if not st.session_state.authenticated:
-    st.title("🔒 Login Required")
-    password = st.text_input("Enter Password", type="password")
-    if st.button("Login"):
-        if password == st.secrets["APP_PASSWORD"]:
-            st.session_state.authenticated = True
-            st.rerun()
-        else:
-            st.error("Incorrect password")
+    col1, col2, col3 = st.columns([1,2,1])
+    with col2:
+        st.markdown("<h1 style='text-align: center;'>🔒 Login</h1>", unsafe_allow_html=True)
+        password = st.text_input("Enter Password", type="password")
+        if st.button("Unlock", use_container_width=True):
+            if password == st.secrets["APP_PASSWORD"]:
+                st.session_state.authenticated = True
+                st.rerun()
+            else:
+                st.error("Incorrect password")
     st.stop()
 
 # Configure Gemini
 try:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-    # Using Gemini 2.0 Flash for speed
     model = genai.GenerativeModel('gemini-2.0-flash')
 except Exception as e:
     st.error(f"Error configuring Gemini: {e}")
     st.stop()
 
 # ------------------------------------------------------------------
-# 2. DATA FUNCTIONS (Google Sheets)
+# 2. DATA FUNCTIONS
 # ------------------------------------------------------------------
 def get_data():
     """Fetch data from Google Sheets."""
     try:
         conn = st.connection("gsheets", type=GSheetsConnection)
         df = conn.read()
-        # Ensure required columns exist
         required_cols = ["Date", "Item", "Amount", "Category", "Notes"]
         for col in required_cols:
             if col not in df.columns:
@@ -55,23 +137,17 @@ def get_data():
         return pd.DataFrame(columns=["Date", "Item", "Amount", "Category", "Notes"])
 
 def save_expense(date, item, amount, category, notes):
-    """Append a new expense to Google Sheets."""
+    """Append a new expense."""
     try:
         conn = st.connection("gsheets", type=GSheetsConnection)
         existing_data = get_data()
-        
         new_entry = pd.DataFrame([{
-            "Date": date,
-            "Item": item,
-            "Amount": float(amount),
-            "Category": category,
-            "Notes": notes
+            "Date": date, "Item": item, "Amount": float(amount),
+            "Category": category, "Notes": notes
         }])
-        
         updated_df = pd.concat([existing_data, new_entry], ignore_index=True)
         conn.update(data=updated_df)
         st.toast(f"✅ Saved: {item} - ₹{amount} ({category})")
-        # Clear cache to reflect updates immediately
         st.cache_data.clear()
         return True
     except Exception as e:
@@ -82,15 +158,8 @@ def save_expense(date, item, amount, category, notes):
 # 3. AI LOGIC
 # ------------------------------------------------------------------
 def analyze_intent_and_process(user_input, current_df):
-    """
-    Determines if input is a query or an entry. 
-    Returns a JSON object with intent and data.
-    """
-    
-    # Context data for the AI to answer queries
     data_summary = ""
     if not current_df.empty:
-        # Pass a summarized version to save tokens
         data_summary = current_df.to_csv(index=False)
 
     current_date = datetime.now().strftime("%Y-%m-%d")
@@ -104,102 +173,72 @@ def analyze_intent_and_process(user_input, current_df):
     If the user describes spending money, extract the details.
     - Parse relative dates (e.g., "yesterday", "last friday") into YYYY-MM-DD. Default to {current_date} if not specified.
     - Extract Item, Amount (number only), Category, and Notes.
-    
     - **AUTO-CATEGORIZATION RULES**:
-      Map the item/context to one of these standardized categories:
       ['Food', 'Groceries', 'Utility Bills', 'Travel', 'Shopping', 'Entertainment', 'Health', 'Education', 'Other']
-      
-      *Examples:*
-      - "Starbucks", "Lunch", "Burger", "Zomato" -> "Food"
-      - "Uber", "Ola", "Bus ticket", "Petrol", "Auto" -> "Travel"
-      - "Electricity", "Internet", "Recharge", "Bescom" -> "Utility Bills"
-      - "Medicine", "Doctor", "Pharmacy" -> "Health"
-      - "Vegetables", "Milk", "Zepto", "Blinkit" -> "Groceries"
-      
-    - Only set "Category" to "UNCERTAIN" if the item is completely ambiguous (e.g., "Paid 500 to Rahul").
-    
-    - Output JSON format: 
-      {{ "intent": "LOG_EXPENSE", "date": "YYYY-MM-DD", "item": "string", "amount": float, "category": "string", "notes": "string" }}
+      *Examples:* "Starbucks"->"Food", "Uber"->"Travel", "Blinkit"->"Groceries".
+    - Only set "Category" to "UNCERTAIN" if completely ambiguous.
+    - Output JSON: {{ "intent": "LOG_EXPENSE", "date": "YYYY-MM-DD", "item": "string", "amount": float, "category": "string", "notes": "string" }}
 
     2. INTENT: QUERY
-    If the user asks a question about their spending history (e.g., "How much did I spend on food?"), use the provided CSV data context to calculate the answer.
-    - Data Context: 
-    {data_summary}
-    - Output JSON format:
-      {{ "intent": "QUERY", "response_text": "Your natural language answer here based on the data." }}
+    If the user asks a question about spending, calculate the answer from data.
+    - Data Context: {data_summary}
+    - Output JSON: {{ "intent": "QUERY", "response_text": "Natural language answer." }}
 
     USER INPUT: "{user_input}"
-    
-    Respond ONLY with the JSON object. Do not add markdown formatting like ```json.
+    Respond ONLY with the JSON object.
     """
     
     response = model.generate_content(system_prompt)
-    text_response = response.text.strip()
-    
-    # Cleanup json markdown if present
-    if text_response.startswith("```json"):
-        text_response = text_response.replace("```json", "").replace("```", "")
-    
+    text_response = response.text.strip().replace("```json", "").replace("```", "")
     try:
         return json.loads(text_response)
     except Exception as e:
-        return {"intent": "ERROR", "response_text": f"Raw AI response error: {text_response}"}
+        return {"intent": "ERROR", "response_text": f"Error: {text_response}"}
 
 # ------------------------------------------------------------------
 # 4. UI & STATE MANAGEMENT
 # ------------------------------------------------------------------
-
-# Initialize Session State
 if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "assistant", "content": "Hello! I can track your expenses. Try 'Spent 200 rupees on auto today' or 'Paid 500 for lunch'."}]
+    st.session_state.messages = [{"role": "assistant", "content": "Hello! I can track your expenses. Try 'Spent 200 rupees on auto' or 'How much did I spend on Food?'"}]
 if "pending_expense" not in st.session_state:
-    st.session_state.pending_expense = None # Stores dict if category is missing
+    st.session_state.pending_expense = None 
 
-st.title("💸 AI Expense Manager")
+# Styled Header
+st.markdown("<h1 style='text-align: left; color: #fff;'>💳 AI Expense Manager</h1>", unsafe_allow_html=True)
 
-# Create Tabs
-tab1, tab2 = st.tabs(["💬 Chat & Entry", "📊 Dashboard"])
+tab1, tab2 = st.tabs(["💬 Chat Assistant", "📊 Dashboard"])
 
-# --- TAB 1: CHAT INTERFACE ---
+# --- TAB 1: CHAT ---
 with tab1:
-    # Display Chat History
-    for msg in st.session_state.messages:
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
+    # Chat container
+    with st.container():
+        for msg in st.session_state.messages:
+            with st.chat_message(msg["role"]):
+                st.markdown(msg["content"])
 
-    # Handle User Input
-    if prompt := st.chat_input("Type here..."):
-        # Add user message to state
+    if prompt := st.chat_input("Type your expense or question here..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
 
-        # Logic Branch: Are we resolving a pending category?
+        # Pending Category Logic
         if st.session_state.pending_expense:
-            # The user's input is treated as the category
             category_input = prompt.strip().title()
-            
-            # Retrieve pending data
             pending = st.session_state.pending_expense
-            
-            # Save data
-            success = save_expense(
-                pending['date'], pending['item'], pending['amount'], category_input, pending['notes']
-            )
+            success = save_expense(pending['date'], pending['item'], pending['amount'], category_input, pending['notes'])
             
             if success:
                 response_msg = f"Got it! Categorized as **{category_input}** and saved."
-                st.session_state.pending_expense = None # Reset state
+                st.session_state.pending_expense = None
             else:
                 response_msg = "Something went wrong saving the data."
-                
+            
             with st.chat_message("assistant"):
                 st.markdown(response_msg)
             st.session_state.messages.append({"role": "assistant", "content": response_msg})
 
         else:
-            # Standard Processing
-            with st.spinner("Thinking..."):
+            with st.spinner("Analyzing..."):
                 current_df = get_data()
                 ai_result = analyze_intent_and_process(prompt, current_df)
 
@@ -211,110 +250,96 @@ with tab1:
 
             elif ai_result.get("intent") == "LOG_EXPENSE":
                 data = ai_result
-                
-                # Check for uncertain category
                 if data.get("category") == "UNCERTAIN":
-                    # Store in session state and ask user
                     st.session_state.pending_expense = data
-                    response_msg = f"I noticed you spent **₹{data['amount']}** on **{data['item']}**, but I'm not sure about the category. Could you tell me which category this belongs to?"
-                    
+                    response_msg = f"I noticed you spent **₹{data['amount']}** on **{data['item']}**, but I'm not sure about the category. Which one is it?"
                     with st.chat_message("assistant"):
                         st.markdown(response_msg)
                     st.session_state.messages.append({"role": "assistant", "content": response_msg})
                 else:
-                    # Save immediately
-                    success = save_expense(
-                        data['date'], data['item'], data['amount'], data['category'], data['notes']
-                    )
+                    success = save_expense(data['date'], data['item'], data['amount'], data['category'], data['notes'])
                     if success:
                         response_msg = f"✅ Saved: **₹{data['amount']}** for **{data['item']}** ({data['category']})."
                     else:
-                        response_msg = "Failed to save to Google Sheets."
-                        
+                        response_msg = "Failed to save."
                     with st.chat_message("assistant"):
                         st.markdown(response_msg)
                     st.session_state.messages.append({"role": "assistant", "content": response_msg})
-            
             else:
-                # Error or confused
                 response_msg = "I'm sorry, I didn't understand that. Please try again."
-                if "response_text" in ai_result:
-                    response_msg += f"\nDebug: {ai_result['response_text']}"
-                
                 with st.chat_message("assistant"):
                     st.markdown(response_msg)
                 st.session_state.messages.append({"role": "assistant", "content": response_msg})
 
 # --- TAB 2: DASHBOARD ---
 with tab2:
-    st.header("Spending Overview")
-    
     df = get_data()
     
     if not df.empty:
-        # --- ROBUST DATA CLEANUP (Prevents Crashes) ---
-        # 1. Force Amount to be numeric (turn "100" into 100.0)
+        # Cleanup
         df["Amount"] = pd.to_numeric(df["Amount"], errors='coerce').fillna(0.0)
-        
-        # 2. Force Category to be string (prevents mixed type errors)
         df["Category"] = df["Category"].fillna("Uncategorized").astype(str)
-        
-        # 3. Handle Dates
         df["Date"] = pd.to_datetime(df["Date"], errors='coerce')
 
-        # --- METRICS SECTION ---
-        col1, col2 = st.columns(2)
+        # --- CUSTOM METRIC CARDS ---
         total_spent = df["Amount"].sum()
         
-        with col1:
-            st.metric("Total Spent (All Time)", f"₹{total_spent:,.2f}")
+        # Calculate Monthly
+        current_month = datetime.now().month
+        current_year = datetime.now().year
+        monthly_mask = (df["Date"].dt.month == current_month) & (df["Date"].dt.year == current_year)
+        monthly_spent = df.loc[monthly_mask, "Amount"].sum()
+
+        col1, col2 = st.columns(2)
         
+        # Inject HTML for Cards
+        with col1:
+            st.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-label">Total Spent (All Time)</div>
+                <div class="metric-value">₹{total_spent:,.0f}</div>
+            </div>
+            """, unsafe_allow_html=True)
+            
         with col2:
-            # Safe month calculation
-            if not df["Date"].isna().all():
-                current_month = datetime.now().month
-                current_year = datetime.now().year
-                monthly_mask = (df["Date"].dt.month == current_month) & (df["Date"].dt.year == current_year)
-                monthly_spent = df.loc[monthly_mask, "Amount"].sum()
-                st.metric("This Month", f"₹{monthly_spent:,.2f}")
-            else:
-                st.metric("This Month", "₹0.00")
+            st.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-label">This Month</div>
+                <div class="metric-value">₹{monthly_spent:,.0f}</div>
+            </div>
+            """, unsafe_allow_html=True)
 
-        st.divider()
+        st.markdown("---")
 
-        # --- CHART SECTION (Horizontal Bar Chart) ---
-        st.subheader("Expenses by Category")
+        # --- CHART ---
+        st.subheader("📊 Expenses by Category")
         
         try:
-            # Group data and reset index to make it a proper DataFrame for Altair
             cat_group = df.groupby("Category")["Amount"].sum().reset_index()
-            
             if not cat_group.empty and cat_group["Amount"].sum() > 0:
-                # Create a Horizontal Bar Chart using Altair
-                chart = alt.Chart(cat_group).mark_bar().encode(
-                    x=alt.X('Amount', title='Total Spent (₹)'),  # Money on the horizontal axis
-                    y=alt.Y('Category', sort='-x', title='Category'), # Categories on the vertical axis, sorted by amount
-                    tooltip=['Category', 'Amount']  # Show details on hover
-                ).properties(
-                    height=300 # Adjust height as needed
-                )
+                # Premium Altair Chart
+                chart = alt.Chart(cat_group).mark_bar(cornerRadiusTopRight=10, cornerRadiusBottomRight=10).encode(
+                    x=alt.X('Amount', title='Total Spent (₹)'),
+                    y=alt.Y('Category', sort='-x', title='Category'),
+                    color=alt.Color('Amount', scale=alt.Scale(scheme='blues'), legend=None),
+                    tooltip=['Category', 'Amount']
+                ).properties(height=350).configure_axis(
+                    labelColor='#ddd', titleColor='#aaa', grid=False
+                ).configure_view(strokeWidth=0)
                 
                 st.altair_chart(chart, use_container_width=True)
             else:
-                st.info("Add some expenses to see your spending breakdown!")
-                
+                st.info("Add some expenses to see your breakdown!")
         except Exception as e:
-            st.warning(f"Could not render chart: {e}")
+            st.warning(f"Chart Error: {e}")
 
         # --- RECENT TRANSACTIONS ---
-        st.divider()
-        st.subheader("Recent Transactions")
-        
-        # Display latest 5 items
+        st.markdown("### 🕒 Recent Transactions")
         st.dataframe(
             df.sort_values(by="Date", ascending=False).head(5), 
-            use_container_width=True
+            use_container_width=True,
+            hide_index=True
         )
         
     else:
-        st.info("No data found in Google Sheets yet. Go to the Chat tab to add expenses!")
+        st.info("Start chatting to add your first expense!")

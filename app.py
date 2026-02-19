@@ -29,8 +29,8 @@ if not st.session_state.authenticated:
 # Configure Gemini
 try:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-    # We use 1.5-flash for better stability/limits, but you can switch to 2.0-flash if needed
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    # Switched back to 2.0 Flash since 1.5 is unavailable for your key
+    model = genai.GenerativeModel('gemini-2.0-flash')
 except Exception as e:
     st.error(f"Error configuring Gemini: {e}")
     st.stop()
@@ -109,11 +109,11 @@ def analyze_intent_and_process(user_input, current_df):
       ['Food', 'Groceries', 'Utility Bills', 'Travel', 'Shopping', 'Entertainment', 'Health', 'Education', 'Other']
       
       *Examples:*
-      - "Starbucks", "Lunch", "Burger" -> "Food"
-      - "Uber", "Ola", "Bus ticket", "Petrol" -> "Travel"
-      - "Electricity", "Internet", "Recharge" -> "Utility Bills"
-      - "Medicine", "Doctor" -> "Health"
-      - "Vegetables", "Milk", "Zepto" -> "Groceries"
+      - "Starbucks", "Lunch", "Burger", "Zomato" -> "Food"
+      - "Uber", "Ola", "Bus ticket", "Petrol", "Auto" -> "Travel"
+      - "Electricity", "Internet", "Recharge", "Bescom" -> "Utility Bills"
+      - "Medicine", "Doctor", "Pharmacy" -> "Health"
+      - "Vegetables", "Milk", "Zepto", "Blinkit" -> "Groceries"
       
     - Only set "Category" to "UNCERTAIN" if the item is completely ambiguous (e.g., "Paid 500 to Rahul").
     
@@ -274,4 +274,41 @@ with tab2:
                 current_month = datetime.now().month
                 current_year = datetime.now().year
                 monthly_mask = (df["Date"].dt.month == current_month) & (df["Date"].dt.year == current_year)
-                monthly_spent = df.loc
+                monthly_spent = df.loc[monthly_mask, "Amount"].sum()
+                st.metric("This Month", f"₹{monthly_spent:,.2f}")
+            else:
+                st.metric("This Month", "₹0.00")
+
+        st.divider()
+
+        # --- CHART SECTION (With Safety Try/Except) ---
+        st.subheader("Expenses by Category")
+        
+        try:
+            # Group data safely
+            cat_group = df.groupby("Category")["Amount"].sum()
+            
+            # We use a Bar Chart because it is 10x more stable than Pie Chart on Cloud
+            if not cat_group.empty and cat_group.sum() > 0:
+                st.bar_chart(cat_group)
+            else:
+                st.info("Add some expenses to see your spending breakdown!")
+                
+        except Exception as e:
+            # If chart crashes, show this error but KEEP APP RUNNING
+            st.warning(f"Could not render chart (Data Issue): {e}")
+            st.write("Here is your raw data instead:")
+            st.dataframe(df)
+
+        # --- RECENT TRANSACTIONS ---
+        st.divider()
+        st.subheader("Recent Transactions")
+        
+        # Display latest 5 items
+        st.dataframe(
+            df.sort_values(by="Date", ascending=False).head(5), 
+            use_container_width=True
+        )
+        
+    else:
+        st.info("No data found in Google Sheets yet. Go to the Chat tab to add expenses!")

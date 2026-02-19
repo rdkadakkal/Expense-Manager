@@ -5,6 +5,7 @@ from streamlit_gsheets import GSheetsConnection
 from datetime import datetime
 import json
 import re
+import altair as alt  # New import for the better chart!
 
 # ------------------------------------------------------------------
 # 1. CONFIGURATION & AUTH
@@ -29,7 +30,7 @@ if not st.session_state.authenticated:
 # Configure Gemini
 try:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-    # Switched back to 2.0 Flash since 1.5 is unavailable for your key
+    # Using Gemini 2.0 Flash for speed
     model = genai.GenerativeModel('gemini-2.0-flash')
 except Exception as e:
     st.error(f"Error configuring Gemini: {e}")
@@ -281,24 +282,29 @@ with tab2:
 
         st.divider()
 
-        # --- CHART SECTION (With Safety Try/Except) ---
+        # --- CHART SECTION (Horizontal Bar Chart) ---
         st.subheader("Expenses by Category")
         
         try:
-            # Group data safely
-            cat_group = df.groupby("Category")["Amount"].sum()
+            # Group data and reset index to make it a proper DataFrame for Altair
+            cat_group = df.groupby("Category")["Amount"].sum().reset_index()
             
-            # We use a Bar Chart because it is 10x more stable than Pie Chart on Cloud
-            if not cat_group.empty and cat_group.sum() > 0:
-                st.bar_chart(cat_group)
+            if not cat_group.empty and cat_group["Amount"].sum() > 0:
+                # Create a Horizontal Bar Chart using Altair
+                chart = alt.Chart(cat_group).mark_bar().encode(
+                    x=alt.X('Amount', title='Total Spent (₹)'),  # Money on the horizontal axis
+                    y=alt.Y('Category', sort='-x', title='Category'), # Categories on the vertical axis, sorted by amount
+                    tooltip=['Category', 'Amount']  # Show details on hover
+                ).properties(
+                    height=300 # Adjust height as needed
+                )
+                
+                st.altair_chart(chart, use_container_width=True)
             else:
                 st.info("Add some expenses to see your spending breakdown!")
                 
         except Exception as e:
-            # If chart crashes, show this error but KEEP APP RUNNING
-            st.warning(f"Could not render chart (Data Issue): {e}")
-            st.write("Here is your raw data instead:")
-            st.dataframe(df)
+            st.warning(f"Could not render chart: {e}")
 
         # --- RECENT TRANSACTIONS ---
         st.divider()

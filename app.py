@@ -13,33 +13,40 @@ import altair as alt
 st.set_page_config(page_title="Lumina AI", layout="wide", page_icon="💳")
 
 # --- CUSTOM CSS FOR "PREMIUM" LOOK ---
+# --- CUSTOM CSS FOR "PREMIUM" LIGHT MODE ---
 def load_css():
     st.markdown("""
         <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
         html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
         header {visibility: hidden;}
-        .stApp { background: linear-gradient(to bottom right, #0e1117, #1a1c24); }
+        
+        /* Premium Light Background */
+        .stApp { background: #f8fafc; color: #0f172a; }
+        
+        /* Light Mode Cards */
         .metric-card {
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
             border-radius: 12px; padding: 20px; text-align: center;
-            backdrop-filter: blur(10px); transition: transform 0.2s;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+            transition: transform 0.2s;
         }
-        .metric-card:hover { transform: translateY(-2px); border-color: rgba(255, 255, 255, 0.3); }
-        .metric-label { color: #a0a0a0; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px; }
-        .metric-value {
-            color: #ffffff; font-size: 2rem; font-weight: 700;
-            background: -webkit-linear-gradient(45deg, #4facfe, #00f2fe);
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-        }
-        .stChatInputContainer { border-radius: 20px !important; border: 1px solid #333 !important; }
+        .metric-card:hover { transform: translateY(-2px); border-color: #cbd5e1; }
+        .metric-label { color: #64748b; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px; font-weight: 600; }
+        .metric-value { color: #0f172a; font-size: 2rem; font-weight: 700; }
+        
+        /* Chat Input and Tabs */
+        .stChatInputContainer { border-radius: 20px !important; border: 1px solid #cbd5e1 !important; background: #ffffff !important; }
         .stTabs [data-baseweb="tab-list"] { gap: 10px; }
-        .stTabs [data-baseweb="tab"] { background-color: rgba(255,255,255,0.05); border-radius: 8px; padding: 10px 20px; border: none; color: #fff; }
-        .stTabs [aria-selected="true"] { background-color: #4facfe !important; color: white !important; }
+        .stTabs [data-baseweb="tab"] { background-color: #e2e8f0; border-radius: 8px; padding: 10px 20px; border: none; color: #475569; }
+        .stTabs [aria-selected="true"] { background-color: #3b82f6 !important; color: white !important; }
+        
+        /* Text Colors */
+        .stMarkdown p { color: #0f172a; }
+        h1 { color: #0f172a !important; }
         </style>
     """, unsafe_allow_html=True)
-
 load_css()
 
 # Configure Gemini

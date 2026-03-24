@@ -60,10 +60,14 @@ except Exception as e:
 # ------------------------------------------------------------------
 # 2. DATA FUNCTIONS
 # ------------------------------------------------------------------
+# ------------------------------------------------------------------
+# 2. DATA FUNCTIONS
+# ------------------------------------------------------------------
 def get_data():
     try:
         conn = st.connection("gsheets", type=GSheetsConnection)
-        df = conn.read()
+        # ttl=0 is the magic command. It forces a live, fresh pull from Google Sheets!
+        df = conn.read(ttl=0) 
         required_cols = ["Date", "Item", "Amount", "Category", "Notes"]
         for col in required_cols:
             if col not in df.columns:
@@ -82,7 +86,9 @@ def save_expense(date, item, amount, category, notes):
         }])
         updated_df = pd.concat([existing_data, new_entry], ignore_index=True)
         conn.update(data=updated_df)
-        st.cache_data.clear()
+        
+        # Nuke the memory so the dashboard updates instantly
+        st.cache_data.clear() 
         return True
     except Exception:
         return False

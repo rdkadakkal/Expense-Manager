@@ -148,16 +148,10 @@ def analyze_intent_and_process(user_input, current_df):
     - Answer financial questions based on the Data. Act like a top-tier analyst finding insights (e.g. "You spend the most on X").
     - Output JSON: {{ "intent": "QUERY", "response_text": "string" }}
 
+    USER INPUT: "{user_input}"
+
     Respond ONLY with the JSON object. 
-    JSON Schema for LOG_EXPENSE: {{ "intent": "LOG_EXPENSE", "date": "YYYY-MM-DD", "item": "string", "amount": float, "category": "string", "notes": "string", "response_text": "string" }}
     """
-    
-    response = model.generate_content(system_prompt)
-    text_response = response.text.strip().replace("```json", "").replace("```", "")
-    try:
-        return json.loads(text_response)
-    except Exception:
-        return {"intent": "ERROR", "response_text": "I encountered an error analyzing that. Can we try again?"}
 
 # ------------------------------------------------------------------
 # 4. UI & STATE MANAGEMENT

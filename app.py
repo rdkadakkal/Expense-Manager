@@ -57,9 +57,7 @@ except Exception as e:
     st.error(f"Error configuring Gemini: {e}")
     st.stop()
 
-# ------------------------------------------------------------------
-# 2. DATA FUNCTIONS
-# ------------------------------------------------------------------
+
 # ------------------------------------------------------------------
 # 2. DATA FUNCTIONS
 # ------------------------------------------------------------------
@@ -152,6 +150,14 @@ def analyze_intent_and_process(user_input, current_df):
 
     Respond ONLY with the JSON object. 
     """
+    
+    # --- THIS IS THE CRITICAL PART THAT WAS MISSING ---
+    try:
+        response = model.generate_content(system_prompt)
+        text_response = response.text.strip().replace("```json", "").replace("```", "")
+        return json.loads(text_response)
+    except Exception as e:
+        return {"intent": "ERROR", "response_text": f"I encountered an error analyzing that. Can we try again?"}
 
 # ------------------------------------------------------------------
 # 4. UI & STATE MANAGEMENT

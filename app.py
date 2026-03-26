@@ -165,7 +165,7 @@ def analyze_intent_and_process(user_input, current_df):
 if "messages" not in st.session_state:
     st.session_state.messages = [{"role": "assistant", "content": "Hello! I am Lumina. Try saying **'Set my monthly budget to 35000'**, or log an expense like **'Spent 200 on auto'** to see my analysis!"}]
 
-st.markdown("<h1 style='text-align: left; color: #fff;'>💳 Lumina AI Manager</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: left; color: #fff;'>💳 Lumina AI Expense Manager</h1>", unsafe_allow_html=True)
 
 tab1, tab2 = st.tabs(["💬 Assistant", "📊 Dashboard"])
 

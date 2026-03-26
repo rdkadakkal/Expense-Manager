@@ -265,7 +265,7 @@ with tab2:
                 y=alt.Y('Category', sort='-x', title=''),
                 color=alt.Color('Amount', scale=alt.Scale(scheme='blues'), legend=None),
                 tooltip=['Category', 'Amount']
-            ).properties(height=350).configure_axis(labelColor='#ddd', titleColor='#aaa', grid=False).configure_view(strokeWidth=0)
+            ).properties(height=350).configure_axis(labelColor='#475569', titleColor='#0f172a', grid=False).configure_view(strokeWidth=0)
             st.altair_chart(chart, use_container_width=True)
 
         # --- RECENT TRANSACTIONS ---

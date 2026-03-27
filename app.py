@@ -13,7 +13,6 @@ import altair as alt
 st.set_page_config(page_title="Lumina AI", layout="wide", page_icon="💳")
 
 # --- CUSTOM CSS FOR "PREMIUM" LOOK ---
-# --- CUSTOM CSS FOR "PREMIUM" LIGHT MODE ---
 def load_css():
     st.markdown("""
         <style>
@@ -74,6 +73,7 @@ def get_data():
     except Exception:
         return pd.DataFrame(columns=["Date", "Item", "Amount", "Category", "Notes"])
 
+# Kept for single entries like SET_BUDGET
 def save_expense(date, item, amount, category, notes):
     try:
         conn = st.connection("gsheets", type=GSheetsConnection)
@@ -83,6 +83,24 @@ def save_expense(date, item, amount, category, notes):
             "Category": category, "Notes": notes
         }])
         updated_df = pd.concat([existing_data, new_entry], ignore_index=True)
+        conn.update(data=updated_df)
+        
+        # Nuke the memory so the dashboard updates instantly
+        st.cache_data.clear() 
+        return True
+    except Exception:
+        return False
+
+# NEW FUNCTION: For saving multiple expenses from a combo prompt!
+def save_multiple_expenses(expenses_list):
+    try:
+        conn = st.connection("gsheets", type=GSheetsConnection)
+        existing_data = get_data()
+        
+        # Convert the list of dictionaries directly into a DataFrame
+        new_entries = pd.DataFrame(expenses_list)
+        
+        updated_df = pd.concat([existing_data, new_entries], ignore_index=True)
         conn.update(data=updated_df)
         
         # Nuke the memory so the dashboard updates instantly
@@ -118,6 +136,7 @@ def analyze_intent_and_process(user_input, current_df):
         
         data_summary = expenses_df.tail(20).to_csv(index=False)
     
+    # UPDATED SYSTEM PROMPT FOR MULTIPLE EXPENSES
     system_prompt = f"""
     You are Lumina, an elite, highly intelligent Financial Advisor AI for an Indian user.
     Current Date: {current_date.strftime("%Y-%m-%d")}. Days left in month: {days_left}.
@@ -130,17 +149,26 @@ def analyze_intent_and_process(user_input, current_df):
     Classify the user's input into one of THREE INTENTS:
     
     1. INTENT: LOG_EXPENSE
-    - Extract Details: date (YYYY-MM-DD), item, amount (number only), category, notes.
-    - GENERATE 'response_text': Acknowledge the expense. THEN, act as a financial coach. 
-      * Calculate if this expense pushes them over their budget or burns through it too fast given the {days_left} days left.
-      * Give a proactive warning or a smart observation based on the category.
+    - The user is logging ONE OR MORE expenses.
+    - Extract Details for EACH expense: Date (YYYY-MM-DD), Item, Amount (number only), Category, Notes.
+    - GENERATE 'response_text': Acknowledge the expenses. THEN, act as a financial coach. 
+      * Calculate if this pushes them over budget or burns through it too fast given the {days_left} days left.
+      * Give a proactive warning or a smart observation based on the categories.
       * Be conversational, premium, and use emojis.
+    - Output JSON format MUST strictly follow this structure: 
+      {{ 
+        "intent": "LOG_EXPENSE", 
+        "expenses": [
+            {{"Date": "YYYY-MM-DD", "Item": "string", "Amount": 0.0, "Category": "string", "Notes": ""}}
+        ],
+        "response_text": "string" 
+      }}
 
     2. INTENT: SET_BUDGET
     - The user wants to set a monthly limit (e.g., "set budget to 35000").
     - Extract the amount.
     - GENERATE 'response_text': Enthusiastically confirm the new budget rule and give a quick tip on daily spending limits.
-    - Output JSON: {{ "intent": "SET_BUDGET", "amount": float, "response_text": "string" }}
+    - Output JSON: {{ "intent": "SET_BUDGET", "amount": 0.0, "response_text": "string" }}
 
     3. INTENT: QUERY
     - Answer financial questions based on the Data. Act like a top-tier analyst finding insights (e.g. "You spend the most on X").
@@ -151,7 +179,6 @@ def analyze_intent_and_process(user_input, current_df):
     Respond ONLY with the JSON object. 
     """
     
-    # --- THIS IS THE CRITICAL PART THAT WAS MISSING ---
     try:
         response = model.generate_content(system_prompt)
         text_response = response.text.strip().replace("```json", "").replace("```", "")
@@ -192,13 +219,9 @@ with tab1:
             save_expense(datetime.now().strftime("%Y-%m-%d"), "MONTHLY_BUDGET", ai_result["amount"], "SYSTEM_BUDGET", "")
             
         elif ai_result.get("intent") == "LOG_EXPENSE":
-            save_expense(
-                ai_result.get('date'), 
-                ai_result.get('item', 'Expense'), 
-                ai_result.get('amount'), 
-                ai_result.get('category', 'Other'), 
-                ""
-            )
+            # UPDATED: Loop through the new array of expenses and pass to the new function!
+            if "expenses" in ai_result:
+                save_multiple_expenses(ai_result["expenses"])
 
         with st.chat_message("assistant"):
             st.markdown(response_msg)
